@@ -1,5 +1,6 @@
+// ./store/useStore.ts
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 import type { Product } from "@/types/product";
 
 export type CartItem = {
@@ -7,88 +8,112 @@ export type CartItem = {
   name: string;
   price: number;
   image: string;
-  qty: number;
   size: string;
   color: string;
+  qty: number;
 };
 
-type StoreState = {
-  cart: CartItem[];
-  isCartOpen: boolean;
+type AddToCartOpts = { size: string; color: string };
 
+type StoreState = {
+  // UI
+  isCartOpen: boolean;
   toggleCart: () => void;
   openCart: () => void;
   closeCart: () => void;
 
-  addToCart: (p: Product, opts: { size: string; color: string; image?: string }) => void;
+  // cart
+  cart: CartItem[];
+  addToCart: (product: Product, opts: AddToCartOpts) => void;
   removeFromCart: (productId: string, size: string, color: string) => void;
-  updateQty: (productId: string, size: string, color: string, qty: number) => void;
+  updateQty: (productId: string, size: string, color: string, nextQty: number) => void;
   clearCart: () => void;
 };
+
+function safeImage(product: Product, color: string) {
+  const v =
+    product.variants?.find((x) => x.colorName === color) ||
+    product.variants?.[0];
+
+  return v?.images?.[0] || product.images?.[0] || "";
+}
 
 export const useStore = create<StoreState>()(
   persist(
     (set, get) => ({
-      cart: [],
+      // UI
       isCartOpen: false,
-
-      toggleCart: () => set({ isCartOpen: !get().isCartOpen }),
+      toggleCart: () => set((s) => ({ isCartOpen: !s.isCartOpen })),
       openCart: () => set({ isCartOpen: true }),
       closeCart: () => set({ isCartOpen: false }),
 
-      addToCart: (p, opts) => {
-        const size = (opts.size || "").trim();
-        const color = (opts.color || "").trim();
-        if (!size || !color) return;
+      // cart
+      cart: [],
 
-        const image =
-          opts.image ||
-          p.variants?.find((v) => v.colorName === color)?.images?.[0] ||
-          p.variants?.[0]?.images?.[0] ||
-          p.images?.[0] ||
-          "";
+      addToCart: (product, opts) => {
+        const { size, color } = opts;
+        if (!product?.id) return;
 
-        const cart = [...get().cart];
-        const idx = cart.findIndex(
-          (i) => i.productId === p.id && i.size === size && i.color === color
+        // block locked products from cart
+        if (product.locked) return;
+
+        const key = `${product.id}__${size}__${color}`;
+        const img = safeImage(product, color);
+
+        const existing = get().cart.find(
+          (i) => `${i.productId}__${i.size}__${i.color}` === key
         );
 
-        if (idx >= 0) {
-          cart[idx] = { ...cart[idx], qty: cart[idx].qty + 1 };
+        if (existing) {
+          set({
+            cart: get().cart.map((i) =>
+              `${i.productId}__${i.size}__${i.color}` === key
+                ? { ...i, qty: i.qty + 1 }
+                : i
+            ),
+          });
         } else {
-          cart.push({
-            productId: p.id,
-            name: p.name,
-            price: p.price,
-            image,
-            qty: 1,
+          const item: CartItem = {
+            productId: product.id,
+            name: product.name,
+            price: product.price,
+            image: img,
             size,
             color,
-          });
+            qty: 1,
+          };
+          set({ cart: [...get().cart, item] });
         }
 
-        set({ cart, isCartOpen: true });
+        // open drawer after adding
+        set({ isCartOpen: true });
       },
 
       removeFromCart: (productId, size, color) => {
-        const cart = get().cart.filter(
-          (i) => !(i.productId === productId && i.size === size && i.color === color)
-        );
-        set({ cart });
+        set({
+          cart: get().cart.filter(
+            (i) => !(i.productId === productId && i.size === size && i.color === color)
+          ),
+        });
       },
 
-      updateQty: (productId, size, color, qty) => {
-        const q = Math.max(1, Math.floor(qty || 1));
-        const cart = get().cart.map((i) =>
-          i.productId === productId && i.size === size && i.color === color
-            ? { ...i, qty: q }
-            : i
-        );
-        set({ cart });
+      updateQty: (productId, size, color, nextQty) => {
+        const qty = Math.max(1, Number(nextQty || 1));
+        set({
+          cart: get().cart.map((i) =>
+            i.productId === productId && i.size === size && i.color === color
+              ? { ...i, qty }
+              : i
+          ),
+        });
       },
 
       clearCart: () => set({ cart: [] }),
     }),
-    { name: "cactus-bear-cart" }
+    {
+      name: "cactusbear_store_v1",
+      storage: createJSONStorage(() => localStorage),
+      partialize: (s) => ({ cart: s.cart }), // only persist cart
+    }
   )
 );

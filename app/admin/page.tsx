@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { auth, db } from "@/lib/firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
 import {
   addDoc,
@@ -10,11 +9,14 @@ import {
   deleteDoc,
   doc,
   onSnapshot,
+  orderBy,
+  query,
   setDoc,
   updateDoc,
-  query,
-  orderBy,
 } from "firebase/firestore";
+import { Lock } from "lucide-react";
+
+import { auth, db } from "@/lib/firebase";
 import type { Product, ProductStatus, CollectionMeta, ProductVariant } from "@/types/product";
 
 const ADMIN_EMAIL = "chibundusadiq@gmail.com";
@@ -45,6 +47,9 @@ export default function AdminPage() {
   const [user, setUser] = useState<User | null>(null);
   const [checking, setChecking] = useState(true);
 
+  const [notice, setNotice] = useState("");
+  const [noticeType, setNoticeType] = useState<NoticeType>("info");
+
   const [products, setProducts] = useState<Product[]>([]);
   const [collections, setCollections] = useState<CollectionMeta[]>([]);
 
@@ -52,10 +57,7 @@ export default function AdminPage() {
   const [collectionForm, setCollectionForm] = useState(EMPTY_COLLECTION_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  const [notice, setNotice] = useState("");
-  const [noticeType, setNoticeType] = useState<NoticeType>("info");
-
-  // homepage timer settings
+  // Homepage timer settings (Firestore: settings/site)
   const [dropTitle, setDropTitle] = useState("DROP INBOUND");
   const [dropEndAt, setDropEndAt] = useState("");
 
@@ -68,74 +70,7 @@ export default function AdminPage() {
     (banner as any)._t = window.setTimeout(() => setNotice(""), 4500);
   }
 
-  // Auth gate
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setChecking(false);
-
-      if (!u) router.replace("/login");
-      else if (u.email !== ADMIN_EMAIL) router.replace("/store");
-    });
-    return () => unsub();
-  }, [router]);
-
-  // Load products
-  useEffect(() => {
-    if (!isAdmin) return;
-
-    const qy = query(collection(db, "products"), orderBy("createdAt", "desc"));
-    const unsub = onSnapshot(
-      qy,
-      (snap) => {
-        const list: Product[] = snap.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<Product, "id">),
-        }));
-        setProducts(list);
-      },
-      (err) => banner("error", `Could not load products: ${err.message}`)
-    );
-    return () => unsub();
-  }, [isAdmin]);
-
-  // Load collections
-  useEffect(() => {
-    if (!isAdmin) return;
-
-    const unsub = onSnapshot(
-      collection(db, "collections"),
-      (snap) => {
-        const list: CollectionMeta[] = snap.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<CollectionMeta, "id">),
-        }));
-        list.sort((a, b) => a.slug.localeCompare(b.slug));
-        setCollections(list);
-      },
-      (err) => banner("error", `Could not load collections: ${err.message}`)
-    );
-    return () => unsub();
-  }, [isAdmin]);
-
-  // Load timer settings
-  useEffect(() => {
-    if (!isAdmin) return;
-
-    const unsub = onSnapshot(
-      doc(db, "settings", "site"),
-      (snap) => {
-        const data: any = snap.data() || {};
-        if (data.dropTitle) setDropTitle(String(data.dropTitle));
-        if (data.dropEndAt) setDropEndAt(msToLocalInput(Number(data.dropEndAt)));
-      },
-      (err) => banner("error", `Could not load timer: ${err.message}`)
-    );
-
-    return () => unsub();
-  }, [isAdmin]);
-
-  // Helpers
+  // ---------- helpers ----------
   const parseCSV = (s: string) =>
     (s || "")
       .split(",")
@@ -162,7 +97,7 @@ export default function AdminPage() {
     )}:${pad(d.getMinutes())}`;
   };
 
-  // variants: "Black | url1, url2"
+  // Parse variants text: one per line: "Black | url1, url2"
   function parseVariants(text: string): ProductVariant[] {
     const lines = (text || "")
       .split("\n")
@@ -191,7 +126,77 @@ export default function AdminPage() {
       .join("\n");
   }
 
-  // Save timer
+  // ---------- auth gate ----------
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setChecking(false);
+
+      if (!u) router.replace("/login");
+      else if (u.email !== ADMIN_EMAIL) router.replace("/store");
+    });
+
+    return () => unsub();
+  }, [router]);
+
+  // ---------- live load products ----------
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    const qy = query(collection(db, "products"), orderBy("createdAt", "desc"));
+    const unsub = onSnapshot(
+      qy,
+      (snap) => {
+        const list: Product[] = snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<Product, "id">),
+        }));
+        setProducts(list);
+      },
+      (err) => banner("error", `Could not load products: ${err.message}`)
+    );
+
+    return () => unsub();
+  }, [isAdmin]);
+
+  // ---------- live load collections ----------
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    const unsub = onSnapshot(
+      collection(db, "collections"),
+      (snap) => {
+        const list: CollectionMeta[] = snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<CollectionMeta, "id">),
+        }));
+        list.sort((a, b) => a.slug.localeCompare(b.slug));
+        setCollections(list);
+      },
+      (err) => banner("error", `Could not load collections: ${err.message}`)
+    );
+
+    return () => unsub();
+  }, [isAdmin]);
+
+  // ---------- live load timer ----------
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    const unsub = onSnapshot(
+      doc(db, "settings", "site"),
+      (snap) => {
+        const data: any = snap.data() || {};
+        if (typeof data.dropTitle === "string") setDropTitle(data.dropTitle);
+        if (typeof data.dropEndAt === "number") setDropEndAt(msToLocalInput(data.dropEndAt));
+      },
+      (err) => banner("error", `Could not load timer: ${err.message}`)
+    );
+
+    return () => unsub();
+  }, [isAdmin]);
+
+  // ---------- actions ----------
   const saveTimer = async () => {
     const ms = dateTimeLocalToMs(dropEndAt);
     if (!ms) return banner("error", "Pick a valid drop end date/time.");
@@ -199,11 +204,7 @@ export default function AdminPage() {
     try {
       await setDoc(
         doc(db, "settings", "site"),
-        {
-          dropTitle: dropTitle.trim() || "DROP INBOUND",
-          dropEndAt: ms,
-          updatedAt: Date.now(),
-        },
+        { dropTitle: dropTitle.trim() || "DROP INBOUND", dropEndAt: ms, updatedAt: Date.now() },
         { merge: true }
       );
       banner("success", "Homepage timer saved.");
@@ -212,60 +213,85 @@ export default function AdminPage() {
     }
   };
 
-  // Save product
+  const saveCollection = async () => {
+    const slug = collectionForm.slug.trim().toLowerCase();
+    if (!slug) return banner("error", "Collection slug is required.");
+
+    const unlockAtMs = dateTimeLocalToMs(collectionForm.unlockAt);
+
+    try {
+      await setDoc(
+        doc(db, "collections", slug),
+        {
+          slug,
+          name: (collectionForm.name || slug).trim(),
+          wallpaper: (collectionForm.wallpaper || "").trim() || "/wallpapers/collection-1.jpg",
+          locked: !!collectionForm.locked,
+          unlockAt: unlockAtMs || 0,
+          updatedAt: Date.now(),
+        },
+        { merge: true }
+      );
+      banner("success", "Collection saved.");
+    } catch (err: any) {
+      banner("error", err?.message || "Could not save collection.");
+    }
+  };
+
+  const loadCollectionIntoForm = (c: CollectionMeta) => {
+    setCollectionForm({
+      slug: c.slug,
+      name: c.name,
+      wallpaper: c.wallpaper,
+      locked: !!c.locked,
+      unlockAt: msToLocalInput(c.unlockAt),
+    });
+    banner("info", `Loaded ${c.slug}`);
+  };
+
   const saveProduct = async () => {
     const name = productForm.name.trim();
     const price = toNumber(productForm.price);
     const category = productForm.category.trim();
     const collectionSlug = productForm.collectionSlug.trim().toLowerCase();
     const sizes = parseCSV(productForm.sizes);
-
     const variants = parseVariants(productForm.variantsText);
 
     if (!name) return banner("error", "Product name is required.");
-    if (!collectionSlug) return banner("error", "Collection slug is required.");
+    if (!collectionSlug) return banner("error", "Collection slug is required (e.g. season-1).");
     if (!category) return banner("error", "Category is required.");
     if (price <= 0) return banner("error", "Price must be valid.");
-    if (sizes.length === 0) return banner("error", "Add at least one size.");
+    if (sizes.length === 0) return banner("error", "Add at least one size (S,M,L...).");
     if (variants.length === 0)
-      return banner("error", "Add at least one variant: Black | url1, url2");
+      return banner("error", "Add at least one variant line: Black | url1, url2");
 
     const images = variants[0]?.images || [];
     const colors = variants.map((v) => v.colorName);
 
     try {
+      const payload = {
+        name,
+        price,
+        category,
+        collectionSlug,
+        description: productForm.description.trim(),
+        status: productForm.status,
+        locked: !!productForm.locked,
+        sizes,
+        variants,
+        images,
+        colors,
+        updatedAt: Date.now(),
+      };
+
       if (editingId) {
-        await updateDoc(doc(db, "products", editingId), {
-          name,
-          price,
-          category,
-          collectionSlug,
-          description: productForm.description.trim(),
-          status: productForm.status,
-          locked: !!productForm.locked,
-          sizes,
-          variants,
-          images,
-          colors,
-          updatedAt: Date.now(),
-        });
+        await updateDoc(doc(db, "products", editingId), payload);
         banner("success", "Product updated.");
         setEditingId(null);
       } else {
         await addDoc(collection(db, "products"), {
-          name,
-          price,
-          category,
-          collectionSlug,
-          description: productForm.description.trim(),
-          status: productForm.status,
-          locked: !!productForm.locked,
-          sizes,
-          variants,
-          images,
-          colors,
+          ...payload,
           createdAt: Date.now(),
-          updatedAt: Date.now(),
         });
         banner("success", "Product added.");
       }
@@ -289,12 +315,14 @@ export default function AdminPage() {
       sizes: (p.sizes || []).join(", "),
       variantsText: variantsToText(p.variants),
     });
+    banner("info", "Editing product…");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const cancelEdit = () => {
     setEditingId(null);
     setProductForm(EMPTY_PRODUCT_FORM);
+    banner("info", "Edit cancelled.");
   };
 
   const removeProduct = async (id: string) => {
@@ -318,41 +346,7 @@ export default function AdminPage() {
     }
   };
 
-  // Save collection
-  const saveCollection = async () => {
-    const slug = collectionForm.slug.trim().toLowerCase();
-    if (!slug) return banner("error", "Collection slug is required.");
-
-    const unlockAtMs = dateTimeLocalToMs(collectionForm.unlockAt);
-
-    try {
-      await setDoc(
-        doc(db, "collections", slug),
-        {
-          name: (collectionForm.name || slug).trim(),
-          slug,
-          wallpaper: (collectionForm.wallpaper || "").trim() || "/wallpapers/collection-1.jpg",
-          locked: !!collectionForm.locked,
-          unlockAt: unlockAtMs || 0,
-        },
-        { merge: true }
-      );
-      banner("success", "Collection saved.");
-    } catch (err: any) {
-      banner("error", err?.message || "Could not save collection.");
-    }
-  };
-
-  const loadCollectionIntoForm = (c: CollectionMeta) => {
-    setCollectionForm({
-      slug: c.slug,
-      name: c.name,
-      wallpaper: c.wallpaper,
-      locked: !!c.locked,
-      unlockAt: msToLocalInput(c.unlockAt),
-    });
-  };
-
+  // ---------- guards ----------
   if (checking) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
@@ -369,6 +363,7 @@ export default function AdminPage() {
     );
   }
 
+  // ---------- UI ----------
   return (
     <div className="min-h-screen bg-black text-white pt-28 px-6 pb-20">
       <div className="max-w-[1500px] mx-auto">
@@ -398,7 +393,9 @@ export default function AdminPage() {
 
         {/* TIMER */}
         <section className="border border-white/10 bg-white/[0.02] p-6 md:p-8 mb-10">
-          <h2 className="text-lg uppercase tracking-widest mb-6 text-brand-neon">Homepage Timer</h2>
+          <h2 className="text-lg uppercase tracking-widest mb-6 text-brand-neon">
+            Homepage Timer
+          </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <Field label="Drop Title">
@@ -429,7 +426,9 @@ export default function AdminPage() {
 
         {/* COLLECTIONS */}
         <section className="border border-white/10 bg-white/[0.02] p-6 md:p-8 mb-10">
-          <h2 className="text-lg uppercase tracking-widest mb-6 text-brand-neon">Collection Settings</h2>
+          <h2 className="text-lg uppercase tracking-widest mb-6 text-brand-neon">
+            Collection Settings
+          </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <Field label="Slug (doc id)">
@@ -451,7 +450,9 @@ export default function AdminPage() {
             <Field label="Wallpaper (public path)">
               <input
                 value={collectionForm.wallpaper}
-                onChange={(e) => setCollectionForm((s) => ({ ...s, wallpaper: e.target.value }))}
+                onChange={(e) =>
+                  setCollectionForm((s) => ({ ...s, wallpaper: e.target.value }))
+                }
                 className="w-full bg-black border border-white/15 px-4 py-3 outline-none focus:border-brand-neon/40"
               />
             </Field>
@@ -473,7 +474,10 @@ export default function AdminPage() {
                 onChange={(e) => setCollectionForm((s) => ({ ...s, locked: e.target.checked }))}
                 className="accent-[var(--brand-neon,#d6ff00)] w-4 h-4"
               />
-              <label htmlFor="collectionLocked" className="uppercase tracking-widest text-xs text-white/80">
+              <label
+                htmlFor="collectionLocked"
+                className="uppercase tracking-widest text-xs text-white/80"
+              >
                 Lock this collection
               </label>
             </div>
@@ -496,7 +500,9 @@ export default function AdminPage() {
           </div>
 
           <div className="mt-8">
-            <div className="text-white/50 text-xs uppercase tracking-widest mb-3">Existing collections:</div>
+            <div className="text-white/50 text-xs uppercase tracking-widest mb-3">
+              Existing collections:
+            </div>
             <div className="flex flex-wrap gap-3">
               {collections.map((c) => (
                 <button
@@ -518,7 +524,10 @@ export default function AdminPage() {
               {editingId ? "Edit Product" : "Add Product"}
             </h2>
             {editingId && (
-              <button onClick={cancelEdit} className="text-xs uppercase tracking-widest text-white/60 hover:text-white transition">
+              <button
+                onClick={cancelEdit}
+                className="text-xs uppercase tracking-widest text-white/60 hover:text-white transition"
+              >
                 Cancel Edit
               </button>
             )}
@@ -538,6 +547,7 @@ export default function AdminPage() {
                 value={productForm.price}
                 onChange={(e) => setProductForm((s) => ({ ...s, price: e.target.value }))}
                 className="w-full bg-black border border-white/15 px-4 py-3 outline-none focus:border-brand-neon/40"
+                placeholder="45000"
               />
             </Field>
 
@@ -546,21 +556,27 @@ export default function AdminPage() {
                 value={productForm.category}
                 onChange={(e) => setProductForm((s) => ({ ...s, category: e.target.value }))}
                 className="w-full bg-black border border-white/15 px-4 py-3 outline-none focus:border-brand-neon/40"
+                placeholder="Outerwear"
               />
             </Field>
 
-            <Field label="Collection Slug">
+            <Field label="Collection Slug (season-1)">
               <input
                 value={productForm.collectionSlug}
-                onChange={(e) => setProductForm((s) => ({ ...s, collectionSlug: e.target.value }))}
+                onChange={(e) =>
+                  setProductForm((s) => ({ ...s, collectionSlug: e.target.value }))
+                }
                 className="w-full bg-black border border-white/15 px-4 py-3 outline-none focus:border-brand-neon/40"
+                placeholder="season-1"
               />
             </Field>
 
             <Field label="Status">
               <select
                 value={productForm.status}
-                onChange={(e) => setProductForm((s) => ({ ...s, status: e.target.value as ProductStatus }))}
+                onChange={(e) =>
+                  setProductForm((s) => ({ ...s, status: e.target.value as ProductStatus }))
+                }
                 className="w-full bg-black border border-white/15 px-4 py-3 outline-none focus:border-brand-neon/40 uppercase tracking-widest text-xs"
               >
                 <option value="in-stock">In Stock</option>
@@ -574,22 +590,30 @@ export default function AdminPage() {
                 value={productForm.sizes}
                 onChange={(e) => setProductForm((s) => ({ ...s, sizes: e.target.value }))}
                 className="w-full bg-black border border-white/15 px-4 py-3 outline-none focus:border-brand-neon/40"
+                placeholder="S,M,L,XL"
               />
             </Field>
 
             <Field label="Color Variants (one per line)">
               <textarea
                 value={productForm.variantsText}
-                onChange={(e) => setProductForm((s) => ({ ...s, variantsText: e.target.value }))}
+                onChange={(e) =>
+                  setProductForm((s) => ({ ...s, variantsText: e.target.value }))
+                }
                 className="w-full bg-black border border-white/15 px-4 py-3 outline-none focus:border-brand-neon/40 min-h-[160px]"
                 placeholder={`Black | https://img1, https://img2\nRed | https://img3, https://img4`}
               />
+              <p className="text-white/40 text-xs mt-2">
+                Format: <span className="text-white/70">Color | url1, url2</span>
+              </p>
             </Field>
 
             <Field label="Description">
               <textarea
                 value={productForm.description}
-                onChange={(e) => setProductForm((s) => ({ ...s, description: e.target.value }))}
+                onChange={(e) =>
+                  setProductForm((s) => ({ ...s, description: e.target.value }))
+                }
                 className="w-full bg-black border border-white/15 px-4 py-3 outline-none focus:border-brand-neon/40 min-h-[160px]"
               />
             </Field>
@@ -599,7 +623,9 @@ export default function AdminPage() {
                 id="locked"
                 type="checkbox"
                 checked={productForm.locked}
-                onChange={(e) => setProductForm((s) => ({ ...s, locked: e.target.checked }))}
+                onChange={(e) =>
+                  setProductForm((s) => ({ ...s, locked: e.target.checked }))
+                }
                 className="accent-[var(--brand-neon,#d6ff00)] w-4 h-4"
               />
               <label htmlFor="locked" className="uppercase tracking-widest text-xs text-white/80">
@@ -627,7 +653,9 @@ export default function AdminPage() {
 
         {/* LIST */}
         <section className="border border-white/10 bg-white/[0.02] p-6 md:p-8">
-          <h2 className="text-lg uppercase tracking-widest text-brand-neon mb-6">Products (Live)</h2>
+          <h2 className="text-lg uppercase tracking-widest text-brand-neon mb-6">
+            Products (Live)
+          </h2>
 
           {products.length === 0 ? (
             <div className="text-white/60 uppercase tracking-widest text-xs">No products yet.</div>
@@ -636,9 +664,19 @@ export default function AdminPage() {
               {products.map((p) => (
                 <div
                   key={p.id}
-                  className="border border-white/10 bg-black/40 p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-6"
+                  className="relative border border-white/10 bg-black/40 p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-6 overflow-hidden"
                 >
-                  <div>
+                  {/* LOCK WATERMARK */}
+                  {p.locked && (
+                    <div className="pointer-events-none absolute inset-0">
+                      <div className="absolute right-6 top-1/2 -translate-y-1/2 opacity-[0.10]">
+                        <Lock className="w-24 h-24 text-red-500" />
+                      </div>
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-red-500/0 to-red-500/5" />
+                    </div>
+                  )}
+
+                  <div className="relative">
                     <div className="uppercase tracking-wider text-base">
                       {p.name}
                       {p.locked && (
@@ -655,11 +693,12 @@ export default function AdminPage() {
                     </div>
 
                     <div className="text-white/40 text-xs mt-1">
-                      Sizes: {(p.sizes || []).join(", ")} • Colors: {(p.variants || []).map((v) => v.colorName).join(", ")}
+                      Sizes: {(p.sizes || []).join(", ")} • Colors:{" "}
+                      {(p.variants || []).map((v) => v.colorName).join(", ")}
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-3">
+                  <div className="relative flex flex-wrap gap-3">
                     <button
                       onClick={() => startEdit(p)}
                       className="px-4 py-2 border border-white/15 uppercase tracking-widest text-xs hover:border-brand-neon/30 transition"

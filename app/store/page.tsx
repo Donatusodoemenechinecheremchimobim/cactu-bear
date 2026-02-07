@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { collection, onSnapshot, query, where, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Product } from "@/types/product";
 import { formatNaira } from "@/lib/currency";
@@ -12,13 +12,17 @@ export default function StorePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const qy = query(collection(db, "products"), where("locked", "==", false));
+    const qy = query(
+      collection(db, "products"),
+      where("locked", "==", false),
+      orderBy("createdAt", "desc")
+    );
+
     const unsub = onSnapshot(qy, (snap) => {
       const list: Product[] = snap.docs.map((d) => ({
         id: d.id,
         ...(d.data() as Omit<Product, "id">),
       }));
-      list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       setProducts(list);
       setLoading(false);
     });
@@ -74,6 +78,10 @@ export default function StorePage() {
 
                       <div className="mt-2 text-white/40 text-[10px] uppercase tracking-widest">
                         {(p.variants || []).map((v) => v.colorName).join(" • ")}
+                      </div>
+
+                      <div className="mt-2 text-white/40 text-[10px] uppercase tracking-widest">
+                        {p.status === "sold-out" ? "SOLD OUT" : p.status === "pre-order" ? "PRE-ORDER" : "IN STOCK"}
                       </div>
                     </div>
                   </div>
