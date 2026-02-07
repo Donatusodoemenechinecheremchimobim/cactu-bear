@@ -1,0 +1,57 @@
+[
+  { 
+    "id": "1", 
+    "name": "Grizzly Camo Hoodie", 
+    "price": 120, 
+    "category": "hoodies", 
+    "collection": "Utopia",
+    "images": ["https://images.unsplash.com/photo-1556821840-3a63f95609a7?q=80&w=800&auto=format&fit=crop"], 
+    "colors": ["Camo", "Black"], 
+    "sizes": ["S", "M", "L", "XL"],
+    "description": "Heavyweight cotton fleece. Oversized fit. Distressed detailing on cuffs. The uniform of the wilderness." 
+  },
+  {
+    "id": "2",
+    "name": "Kodiak Tactical Vest",
+    "price": 85, 
+    "category": "vests", 
+    "collection": "Utopia",
+    "images": ["https://images.unsplash.com/photo-1591047139829-d91aecb6caea?q=80&w=800&auto=format&fit=crop"],
+    "colors": ["Brown", "Tan"], 
+    "sizes": ["M", "L"],
+    "description": "Multi-pocket utility vest. Water-resistant nylon. Adjustable straps. Ready for any terrain."
+  },
+  {
+    "id": "3",
+    "name": "Oasis Graphic Tee",
+    "price": 55, 
+    "category": "clothes", 
+    "collection": "Season 2",
+    "images": ["https://images.unsplash.com/photo-1576566588028-4147f3842f27?q=80&w=1964&auto=format&fit=crop"],
+    "colors": ["Black", "White"], 
+    "sizes": ["S", "M", "L", "XL"],
+    "description": "Vintage wash cotton. Puff print graphic on back. Boxy fit."
+  },
+  {
+    "id": "4",
+    "name": "Dune Cargo Pant",
+    "price": 140, 
+    "category": "clothes", 
+    "collection": "Season 2",
+    "images": ["https://images.unsplash.com/photo-1559563458-52c69529db81?q=80&w=2083&auto=format&fit=crop"],
+    "colors": ["Sand", "Olive"], 
+    "sizes": ["30", "32", "34", "36"],
+    "description": "Relaxed fit cargo pants with adjustable ankle drawstrings. Heavy canvas material."
+  },
+  {
+    "id": "mystery-001",
+    "name": "Classified Mystery Box",
+    "price": 100, 
+    "category": "bundle", 
+    "collection": "Classified",
+    "images": ["https://images.unsplash.com/photo-1629813295874-9d5849826354?q=80&w=2000"],
+    "colors": ["Unknown"], 
+    "sizes": ["S", "M", "L", "XL"],
+    "description": "Contains 2-3 items. Guaranteed value of $150+. Contents are strictly confidential until delivery. No returns."
+  }
+]

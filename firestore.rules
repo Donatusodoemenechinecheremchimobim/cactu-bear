@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn() && request.auth.token.email == "chibundusadiq@gmail.com";
+    }
+
+    // =========================
+    // PRODUCTS (public read, admin write)
+    // =========================
+    match /products/{productId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // =========================
+    // COLLECTIONS META (public read, admin write)
+    // =========================
+    match /collections/{collectionId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // =========================
+    // USER CART (private per user)
+    // /carts/{uid}
+    // =========================
+    match /carts/{uid} {
+      allow read, create, update, delete: if signedIn() && request.auth.uid == uid;
+    }
+
+    // =========================
+    // ORDERS
+    // /orders/{orderId}
+    // Users can create their own orders.
+    // Admin can read/edit all.
+    // =========================
+    match /orders/{orderId} {
+      // Anyone signed in can create an order
+      allow create: if signedIn();
+
+      // Admin can see all orders
+      allow read: if isAdmin();
+
+      // Optional: let a user read only their own orders (recommended)
+      // If your order doc contains: userId: request.auth.uid
+      allow get, list: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+
+      // Only admin can update/delete orders
+      allow update, delete: if isAdmin();
+    }
+
+    // =========================
+    // OPTIONAL: USERS PROFILE
+    // /users/{uid}
+    // =========================
+    match /users/{uid} {
+      allow read, create, update: if signedIn() && request.auth.uid == uid;
+      allow delete: if isAdmin();
+    }
+
+    // =========================
+    // Default: block everything else
+    // =========================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

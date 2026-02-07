@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+.DS_Store
+
+# Environment variables (Crucial for security!)
+.env
+.env.local
+
+# Build folders
+dist/
+build/
+.next/
